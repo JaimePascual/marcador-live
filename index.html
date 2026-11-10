@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <title>Marcador en directo · San José</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#111827;background:#f3f4f6}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh}
+    .wrap{max-width:900px;margin:0 auto;padding:12px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:2px 0 12px}
+    h1{font-size:clamp(18px,4vw,25px);margin:0}
+    .status{font-size:12px;color:#6b7280;text-align:right}
+    .scoreboard{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .team{border:0;border-radius:15px;color:white;min-height:clamp(190px,35vh,310px);padding:12px 8px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;user-select:none}
+    .team:disabled{cursor:default;opacity:1}
+    .sj{background:#c62828}.op{background:#1769aa}
+    .team-name{font-size:clamp(16px,3vw,23px);font-weight:750}
+    .score{font-size:clamp(76px,19vw,150px);font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums}
+    .tap-hint{font-size:12px;opacity:.85;margin-top:5px}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+    button.action{border:0;border-radius:9px;padding:11px 14px;font-size:14px;font-weight:700;cursor:pointer}
+    button.action:disabled{opacity:.45;cursor:not-allowed}
+    .grey{background:#6b7280;color:#fff}.red{background:#b91c1c;color:#fff}.dark{background:#1f2937;color:#fff}
+    .panel{background:white;border-radius:12px;padding:12px;margin-top:10px;box-shadow:0 1px 4px #00000012}
+    .panel h2{font-size:16px;margin:0 0 9px}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    th,td{padding:9px 6px;text-align:center;border-bottom:1px solid #e5e7eb}
+    th{font-size:12px;color:#6b7280;font-weight:700}
+    tr.current{background:#eff6ff;font-weight:750}
+    tr.done{cursor:pointer}
+    tr.done:hover{background:#f9fafb}
+    .pending{color:#9ca3af}.playing{color:#2563eb}.finished{color:#15803d}
+    .authline{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+    .authline small{color:#6b7280}
+    .authbox{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+    input{min-width:0;flex:1;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px}
+    .hidden{display:none!important}
+    .note{font-size:12px;color:#6b7280;line-height:1.45;margin:8px 0 0}
+    .modal-backdrop{position:fixed;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;padding:18px;z-index:10}
+    .modal{width:min(420px,100%);background:#fff;border-radius:14px;padding:18px;box-shadow:0 10px 40px #0004}
+    .modal h3{margin:0 0 8px;font-size:18px}.modal p{margin:0 0 14px;color:#4b5563}
+    .modal-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+    .modal-actions button{border:0;border-radius:8px;padding:10px 13px;font-weight:700;cursor:pointer}
+    @media(max-width:520px){.wrap{padding:9px}.team{min-height:190px}.controls button{flex:1}.panel{padding:10px}th,td{padding:8px 3px}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Marcador en directo</h1>
+    <div class="status" id="connection">Conectando…</div>
+  </header>
+
+  <main>
+    <section class="scoreboard" aria-label="Marcador">
+      <button class="team sj" id="sjButton" aria-label="Sumar punto a San José">
+        <span class="team-name">SAN JOSÉ</span><span class="score" id="sjScore">0</span><span class="tap-hint" id="sjHint">Toca para sumar</span>
+      </button>
+      <button class="team op" id="opButton" aria-label="Sumar punto al rival">
+        <span class="team-name">RIVAL</span><span class="score" id="opScore">0</span><span class="tap-hint" id="opHint">Toca para sumar</span>
+      </button>
+    </section>
+
+    <div class="controls admin-only hidden">
+      <button class="action grey" id="minusSj">−1 San José</button>
+      <button class="action grey" id="minusOp">−1 Rival</button>
+      <button class="action grey" id="finishSet">Reiniciar set</button>
+      <button class="action red" id="resetAll">Reinicio total</button>
+    </div>
+
+    <section class="panel">
+      <h2>Resultado de los sets</h2>
+      <table>
+        <thead><tr><th>Set</th><th>San José</th><th>Rival</th><th>Estado</th></tr></thead>
+        <tbody id="setsBody">
+          <tr><td>1</td><td>0</td><td>0</td><td class="playing">En juego</td></tr>
+          <tr><td>2</td><td>—</td><td>—</td><td class="pending">Pendiente</td></tr>
+          <tr><td>3</td><td>—</td><td>—</td><td class="pending">Pendiente</td></tr>
+          <tr><td>4</td><td>—</td><td>—</td><td class="pending">Pendiente</td></tr>
+          <tr><td>5</td><td>—</td><td>—</td><td class="pending">Pendiente</td></tr>
+        </tbody>
+      </table>
+      <p class="note" id="tableHint">Los resultados se actualizan en directo.</p>
+    </section>
+
+    <section class="panel">
+      <div class="authline">
+        <div><strong id="authTitle">Acceso de encargados</strong><br><small id="authMessage">El público puede consultar el marcador sin iniciar sesión.</small></div>
+        <button class="action dark" id="loginToggle">Iniciar sesión</button>
+      </div>
+      <div class="authbox hidden" id="loginBox">
+        <input id="email" type="email" autocomplete="username" placeholder="Correo electrónico">
+        <input id="password" type="password" autocomplete="current-password" placeholder="Contraseña">
+        <button class="action dark" id="loginButton">Entrar</button>
+      </div>
+      <div class="authline hidden" id="signedInBox">
+        <small id="signedInText"></small>
+        <button class="action grey" id="logoutButton">Cerrar sesión</button>
+      </div>
+      <p class="note" id="configNote">La configuración de Firebase debe completarse antes de publicar esta versión.</p>
+    </section>
+  </main>
+</div>
+
+<div class="modal-backdrop hidden" id="modalBackdrop" role="dialog" aria-modal="true">
+  <div class="modal">
+    <h3 id="modalTitle">Confirmar</h3>
+    <p id="modalText"></p>
+    <div class="modal-actions" id="modalActions"></div>
+  </div>
+</div>
+
+<!-- Firebase: sustituye la configuración de ejemplo por la de tu proyecto. -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+(() => {
+  'use strict';
+
+  const firebaseConfig = {
+    apiKey: "PON_AQUI_TU_API_KEY",
+    authDomain: "PON_AQUI_TU_PROYECTO.firebaseapp.com",
+    databaseURL: "https://PON_AQUI_TU_PROYECTO-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "PON_AQUI_TU_PROYECTO",
+    appId: "PON_AQUI_TU_APP_ID"
+  };
+  const MATCH_PATH = "matches/san-jose";
+  const ADMIN_PATH = "admins";
+  const defaultState = () => ({
+    currentSet: 1, sj: 0, rival: 0, finished: false,
+    sets: Array.from({length:5}, () => ({sj:null, rival:null, completed:false})),
+    updatedAt: Date.now()
+  });
+
+  let state = defaultState();
+  let db = null, auth = null, matchRef = null;
+  let user = null, isAdmin = false, ready = false, writing = false;
+
+  const $ = id => document.getElementById(id);
+  const adminEls = document.querySelectorAll('.admin-only');
+  const setText = (id, value) => { $(id).textContent = value; };
+
+  function showModal(title, message, buttons) {
+    setText('modalTitle', title); setText('modalText', message);
+    const actions = $('modalActions'); actions.innerHTML = '';
+    buttons.forEach(item => {
+      const b = document.createElement('button');
+      b.textContent = item.label; b.style.background = item.color || '#e5e7eb';
+      b.style.color = item.textColor || '#111827';
+      b.onclick = () => { closeModal(); item.run(); };
+      actions.appendChild(b);
+    });
+    $('modalBackdrop').classList.remove('hidden');
+  }
+  function closeModal() { $('modalBackdrop').classList.add('hidden'); }
+  function showError(error) { alert(error && error.message ? error.message : String(error)); }
+
+  function render() {
+    setText('sjScore', state.sj ?? 0); setText('opScore', state.rival ?? 0);
+    const enabled = isAdmin && !state.finished && ready && !writing;
+    $('sjButton').disabled = !enabled; $('opButton').disabled = !enabled;
+    setText('sjHint', enabled ? 'Toca para sumar' : (state.finished ? 'Partido finalizado' : ''));
+    setText('opHint', enabled ? 'Toca para sumar' : (state.finished ? 'Partido finalizado' : ''));
+    adminEls.forEach(el => el.classList.toggle('hidden', !isAdmin));
+    $('finishSet').disabled = !enabled;
+    $('resetAll').disabled = !isAdmin || !ready || writing;
+    $('minusSj').disabled = !enabled || state.sj <= 0;
+    $('minusOp').disabled = !enabled || state.rival <= 0;
+    const body = $('setsBody'); body.innerHTML = '';
+    state.sets.forEach((set, i) => {
+      const tr = document.createElement('tr');
+      const current = !state.finished && state.currentSet === i+1;
+      const done = !!set.completed;
+      if (current) tr.className = 'current';
+      if (done && isAdmin) tr.classList.add('done');
+      const vals = [String(i+1), done ? set.sj : (current ? state.sj : '—'),
+                    done ? set.rival : (current ? state.rival : '—'),
+                    state.finished && i===4 ? 'Partido finalizado' : (done ? 'Finalizado' : (current ? 'En juego' : 'Pendiente'))];
+      vals.forEach((v,j) => {
+        const td = document.createElement('td'); td.textContent = v;
+        if (j===3) td.className = done ? 'finished' : (current ? 'playing' : 'pending');
+        tr.appendChild(td);
+      });
+      if (done && isAdmin) tr.addEventListener('click', () => editSet(i));
+      body.appendChild(tr);
+    });
+    $('tableHint').textContent = isAdmin ? 'Pulsa una fila finalizada para corregir su resultado. También puedes editar el set en juego.' : 'Los resultados se actualizan en directo.';
+    if (user) {
+      $('loginToggle').classList.add('hidden'); $('loginBox').classList.add('hidden');
+      $('signedInBox').classList.remove('hidden');
+      setText('signedInText', isAdmin ? 'Sesión iniciada · Encargado autorizado' : 'Sesión iniciada · Sin permisos de edición');
+      $('authTitle').textContent = 'Cuenta conectada';
+      $('authMessage').textContent = user.email || '';
+    } else {
+      $('loginToggle').classList.remove('hidden'); $('signedInBox').classList.add('hidden');
+      $('authTitle').textContent = 'Acceso de encargados';
+      $('authMessage').textContent = 'El público puede consultar el marcador sin iniciar sesión.';
+    }
+  }
+
+  function save() {
+    if (!isAdmin || !matchRef || !ready || writing) return;
+    writing = true; render();
+    state.updatedAt = firebase.database.ServerValue.TIMESTAMP;
+    matchRef.set(state).catch(showError).finally(() => { writing = false; render(); });
+  }
+  function changeScore(team, delta) {
+    if (!isAdmin || state.finished) return;
+    const key = team === 'sj' ? 'sj' : 'rival';
+    state[key] = Math.max(0, (Number(state[key]) || 0) + delta);
+    save();
+  }
+  function editSet(index) {
+    const set = state.sets[index];
+    const isCurrent = !state.finished && state.currentSet === index+1;
+    const initialSj = isCurrent ? state.sj : (set.sj ?? 0);
+    const initialRival = isCurrent ? state.rival : (set.rival ?? 0);
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<p>Introduce el resultado correcto de este set.</p><div style="display:flex;gap:8px"><label style="flex:1">San José<input id="editSj" type="number" min="0" step="1" value="'+initialSj+'" style="width:100%;margin-top:5px"></label><label style="flex:1">Rival<input id="editRival" type="number" min="0" step="1" value="'+initialRival+'" style="width:100%;margin-top:5px"></label></div>';
+    setText('modalTitle', 'Editar set ' + (index+1));
+    $('modalText').innerHTML = ''; $('modalText').appendChild(wrap);
+    const actions = $('modalActions'); actions.innerHTML = '';
+    const cancel = document.createElement('button'); cancel.textContent='Cancelar'; cancel.onclick=closeModal;
+    const saveBtn = document.createElement('button'); saveBtn.textContent='Guardar'; saveBtn.style.background='#1f2937'; saveBtn.style.color='white';
+    saveBtn.onclick = () => {
+      const a = Number($('editSj').value), b = Number($('editRival').value);
+      if (!Number.isInteger(a)||!Number.isInteger(b)||a<0||b<0) { alert('Introduce puntos enteros iguales o superiores a cero.'); return; }
+      if (isCurrent) { state.sj=a; state.rival=b; }
+      else { state.sets[index] = {sj:a, rival:b, completed:true}; }
+      closeModal(); save();
+    };
+    actions.append(cancel, saveBtn); $('modalBackdrop').classList.remove('hidden');
+  }
+
+  function finishSet() {
+    if (!isAdmin || state.finished) return;
+    const last = state.currentSet === 5;
+    showModal('Reiniciar set', '¿Quieres incorporar el resultado final a la tabla de sets?', [
+      {label:'Cancelar', run:()=>{}},
+      {label:'No · Guardar 0-0', run:()=>completeSet(false)},
+      {label:'Sí · Guardar resultado', color:'#1f2937', textColor:'#fff', run:()=>completeSet(true)}
+    ]);
+  }
+  function completeSet(keepScore) {
+    const i = state.currentSet - 1;
+    state.sets[i] = {sj: keepScore ? Number(state.sj)||0 : 0, rival: keepScore ? Number(state.rival)||0 : 0, completed:true};
+    if (state.currentSet === 5) {
+      state.finished = true;
+    } else {
+      state.currentSet += 1; state.sj = 0; state.rival = 0;
+    }
+    save();
+  }
+  function resetAll() {
+    if (!isAdmin) return;
+    showModal('Reinicio total', 'Se borrarán el marcador y los resultados de los cinco sets. ¿Continuar?', [
+      {label:'Cancelar',run:()=>{}},
+      {label:'Continuar',color:'#b91c1c',textColor:'#fff',run:()=>showModal('Confirmación final','Esta acción no se puede deshacer. ¿Reiniciar completamente el partido?',[
+        {label:'Cancelar',run:()=>{}},
+        {label:'Sí, reiniciar',color:'#b91c1c',textColor:'#fff',run:()=>{state=defaultState();save();}}
+      ])}
+    ]);
+  }
+
+  $('sjButton').addEventListener('click',()=>changeScore('sj',1));
+  $('opButton').addEventListener('click',()=>changeScore('rival',1));
+  $('minusSj').addEventListener('click',()=>changeScore('sj',-1));
+  $('minusOp').addEventListener('click',()=>changeScore('rival',-1));
+  $('finishSet').addEventListener('click',finishSet);
+  $('resetAll').addEventListener('click',resetAll);
+  $('loginToggle').addEventListener('click',()=>$('loginBox').classList.toggle('hidden'));
+  $('loginButton').addEventListener('click', async () => {
+    try {
+      await auth.signInWithEmailAndPassword($('email').value.trim(), $('password').value);
+      $('password').value='';
+    } catch(e) { showError(e); }
+  });
+  $('logoutButton').addEventListener('click',()=>auth.signOut());
+  $('modalBackdrop').addEventListener('click',e=>{if(e.target===$('modalBackdrop'))closeModal();});
+
+  const configured = firebaseConfig.apiKey !== 'PON_AQUI_TU_API_KEY' &&
+                     firebaseConfig.projectId !== 'PON_AQUI_TU_PROYECTO';
+  if (!configured) {
+    setText('connection','Falta configurar Firebase');
+    $('configNote').textContent='Antes de usar el marcador, configura Firebase en este archivo y publica las reglas de seguridad de Realtime Database. La pantalla funciona como vista previa local, pero no sincroniza.';
+    render(); return;
+  }
+
+  try {
+    firebase.initializeApp(firebaseConfig);
+    auth = firebase.auth(); db = firebase.database(); matchRef = db.ref(MATCH_PATH);
+    setText('connection','Conectando con el marcador…');
+    matchRef.on('value', snap => {
+      if (snap.exists()) state = snap.val();
+      else if (isAdmin) { state=defaultState(); save(); }
+      ready = true; setText('connection','En directo'); render();
+    }, err => { setText('connection','Error de conexión'); showError(err); });
+
+    auth.onAuthStateChanged(async currentUser => {
+      user = currentUser; isAdmin = false;
+      if (user) {
+        try {
+          const permission = await db.ref(ADMIN_PATH+'/'+user.uid).once('value');
+          isAdmin = permission.val() === true;
+        } catch(e) { showError(e); }
+      }
+      render();
+    });
+  } catch(e) {
+    setText('connection','Error de configuración');
+    $('configNote').textContent='Revisa la configuración de Firebase: '+e.message;
+  }
+})();
+</script>
+</body>
+</html>
